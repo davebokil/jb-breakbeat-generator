@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>james brown breakbeat generator</title>
+    <style type="text/css">
+    .wrapper {
+        text-align: center;
+        margin-top: 230px;
+    }
+    
+    body {
+        background-color: grey;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        background-image: url("hitmeh.gif");
+    }
+    
+    h1 {
+        color: white;
+    }
+    
+    button {
+        background-color: yellow;
+        height: 200px;
+        width: 200px;
+        border: none;
+        font-size: 30px;
+        padding: 15px 32px;
+        border-radius: 50%;
+        font-weight: bold;
+    }
+    
+    button:focus {
+        outline: 0;
+    }
+    </style>
+    <!-- javascript -->
+    <script>
+    var bass = new Audio();
+    bass.src = "kool.wav";
+
+    function PlaySound() {
+        bass.play();
+        bass.loop = true;
+    }
+    </script>
+</head>
+
+<body>
+    <div class="wrapper">
+        <h1>THE JAMES BROWN BREAKBEAT GENERATOR</h1>
+        <audio id="bass"> </audio>
+        <button onclick="PlaySound()">HIT MEH!</button>
+    </div>
+</body>
+
+</html>

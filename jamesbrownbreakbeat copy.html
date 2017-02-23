@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>james brown breakbeat generator</title>
+    <!-- CSS -->
+    <style type="text/css">
+    .wrapper {
+        text-align: center;
+    }
+    
+    body {
+        background-color: grey;
+        font-family: "Helvetica";
+        background-image: url("hitmeh.gif");
+    }
+    
+    h1 {
+        color: white;
+    }
+    
+    button {
+        background-color: yellow;
+        border: none;
+        height: 40px;
+        font-size: 20px;
+    }
+    </style>
+    <!-- Javascript -->
+</head>
+<!-- Body -->
+
+<body>
+    <div class="wrapper">
+        <h1>JAMES BROWN BREAKBEAT GENERATOR</h1>
+        <audio id="breakbeat" controls>
+            <source src="kool.wav" type="audio/mpeg"> Your browser does not support the audio element.
+        </audio>
+        <br>
+        <button onclick="enableLoop()" onclick="play()" type="button">Enable loop</button>
+        <button onclick="disableLoop()" type="button">Disable loop</button>
+    <script>
+    var x = document.getElementById("breakbeat");
+
+    function play() {
+        x.src = "kool.wav";
+        x.play();
+    }
+
+    function enableLoop() {
+        x.loop = true;
+        x.load();
+    }
+
+    function disableLoop() {
+        x.loop = false;
+        x.load();
+    }
+    </script>
+    </div>
+</body>
+
+</html>
