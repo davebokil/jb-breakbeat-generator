@@ -51,6 +51,28 @@
         <h1>THE JAMES BROWN BREAKBEAT GENERATOR</h1>
         <audio id="bass"> </audio>
         <button onclick="PlaySound()">HIT MEH!</button>
+        <button id="start">Start LL</button>
+  <button id="stop">Stop LL</button>
+  <script src="loopify.js" type="text/javascript"></script>
+  <script>
+
+    loopify("kool.wav",ready);
+
+    function ready(err,loop){
+
+      if (err) {
+        console.warn(err);
+      }
+
+      document.getElementById("start").addEventListener("click",function(){
+        loop.play();
+      });
+      document.getElementById("stop").addEventListener("click",function(){
+        loop.stop();
+      });
+    }
+
+  </script>
     </div>
 </body>
 
