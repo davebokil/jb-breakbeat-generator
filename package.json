@@ -1,0 +1,25 @@
+{
+  "name": "jb-breakbeat-generator",
+  "version": "1.0.0",
+  "description": "js breaks",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davebokil/jb-breakbeat-generator.git"
+  },
+  "author": "dave bokil",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/davebokil/jb-breakbeat-generator/issues"
+  },
+  "homepage": "https://github.com/davebokil/jb-breakbeat-generator#readme",
+  "dependencies": {
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "morgan": "^1.9.0"
+  }
+}
