@@ -12,24 +12,23 @@ $( document ).ready(function() {
 document.getElementById("change").addEventListener("click", function() {
             location.reload();
         });
-
-        var musicArray = ["assets/audio/cold.wav", "assets/audio/funky.wav", "assets/audio/give.wav", "assets/audio/hustle.wav", "assets/audio/proud.wav", "assets/audio/csl1.wav", "assets/audio/csl2.wav", "assets/audio/dead.wav", "assets/audio/president.wav", "assets/audio/sp4.wav"]
-        var musicChoice = musicArray[Math.floor(Math.random() * musicArray.length)];
-
-        music(musicChoice)
-
-        function music(musicChoice) {
-            loopify(musicChoice, ready);
-
-            function ready(err, loop) {
-                if (err) {
-                    console.warn(err);
-                }
-                loop.play();
-                // document.getElementById("stop").addEventListener("click", function() {
-                //     loop.stop();
-                // });
-            }
-        }
 });
 
+var musicArray = ["assets/audio/cold.wav", "assets/audio/funky.wav", "assets/audio/give.wav", "assets/audio/hustle.wav", "assets/audio/proud.wav", "assets/audio/csl1.wav", "assets/audio/csl2.wav", "assets/audio/dead.wav", "assets/audio/president.wav", "assets/audio/sp4.wav"]
+var musicChoice = musicArray[Math.floor(Math.random() * musicArray.length)];
+
+music(musicChoice)
+
+function music(musicChoice) {
+    loopify(musicChoice, ready);
+
+    function ready(err, loop) {
+        if (err) {
+            console.warn(err);
+        }
+        loop.play();
+        document.getElementById("stop").addEventListener("click", function() {
+            loop.stop();
+        });
+    }
+}

@@ -19,7 +19,7 @@ app.use(express.static("./public"));
 
 // -------------------------------------------------
 
-// Main "/" Route. Redirect user to React App
+// Main "/" Route. Redirect user to Index
 app.get("/", function (req, res) {
     res.sendFile(__dirname + "/public/index.html");
 });
