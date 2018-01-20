@@ -48,43 +48,43 @@
             chooseMusic()
         });
 
-        function chooseMusic() {
-            var musicArray = ["assets/audio/cold.wav", "assets/audio/funky.wav", "assets/audio/give.wav", "assets/audio/hustle.wav", "assets/audio/proud.wav"]
-            var musicChoice = musicArray[Math.floor(Math.random() * musicArray.length)];
-            console.log(musicChoice)
+        // function chooseMusic() {
+        //     var musicArray = ["assets/audio/cold.wav", "assets/audio/funky.wav", "assets/audio/give.wav", "assets/audio/hustle.wav", "assets/audio/proud.wav"]
+        //     var musicChoice = musicArray[Math.floor(Math.random() * musicArray.length)];
+        //     console.log(musicChoice)
 
-            loopify(musicChoice, ready);
+        //     loopify(musicChoice, ready);
 
-            function ready(err, loop) {
-                if (err) {
-                    console.warn(err);
-                }
-                loop.stop();
-                loop.play();
+        //     function ready(err, loop) {
+        //         if (err) {
+        //             console.warn(err);
+        //         }
+        //         loop.stop();
+        //         loop.play();
 
-                document.getElementById("stop").addEventListener("click", function() {
-                    loop.stop();
-                });
-            }
-        }
+        //         document.getElementById("stop").addEventListener("click", function() {
+        //             loop.stop();
+        //         });
+        //     }
+        // }
         
 
 
-        // loopify("assets/audio/cold.wav", ready);
+        loopify("assets/audio/cold.wav", ready);
 
-        // function ready(err, loop) {
+        function ready(err, loop) {
 
-        //     if (err) {
-        //         console.warn(err);
-        //     }
+            if (err) {
+                console.warn(err);
+            }
 
-        //     document.getElementById("start").addEventListener("click", function() {
-        //         loop.play();
-        //     });
-        //     document.getElementById("stop").addEventListener("click", function() {
-        //         loop.stop();
-        //     });
-        // }
+            document.getElementById("start").addEventListener("click", function() {
+                loop.play();
+            });
+            document.getElementById("stop").addEventListener("click", function() {
+                loop.stop();
+            });
+        }
         </script>
     </div>
 </body>
