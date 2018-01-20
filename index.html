@@ -68,9 +68,11 @@
         //     }
         // }
         
+        var musicArray = ["assets/audio/cold.wav", "assets/audio/funky.wav", "assets/audio/give.wav", "assets/audio/hustle.wav", "assets/audio/proud.wav"]
+        var musicChoice = musicArray[Math.floor(Math.random() * musicArray.length)];
+        console.log(musicChoice)
 
-
-        loopify("assets/audio/cold.wav", ready);
+        loopify(musicChoice, ready);
 
         function ready(err, loop) {
 
