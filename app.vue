@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { pickTrack, pickGif, pickLabelColor } = useBreakbeats()
-const { play, stop, setVolume, setPitch } = useLoopPlayer()
+const { play, stop, setVolume, setPitch, beginScratch, scratchBy, endScratch } = useLoopPlayer()
 
 const playing = ref(false)
 const currentTrack = ref<string | null>(null)
@@ -9,6 +9,17 @@ const labelColor = ref(pickLabelColor())
 const errorMessage = ref('')
 const volume = ref(0.8)
 const pitch = ref(0)
+
+const tvScreen = ref<InstanceType<typeof TvScreen> | null>(null)
+const turntableHeight = ref<number | null>(null)
+let tvResizeObserver: ResizeObserver | null = null
+
+function updateTurntableHeight() {
+  const tvEl = tvScreen.value?.$el as HTMLElement | undefined
+  if (tvEl) {
+    turntableHeight.value = tvEl.offsetHeight
+  }
+}
 
 function onVolumeInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
@@ -50,13 +61,34 @@ function onHitMe() {
   onPlay()
 }
 
+function onScratchStart() {
+  beginScratch()
+}
+
+function onScratchMove(payload: { deltaSeconds: number, speed: number }) {
+  scratchBy(payload.deltaSeconds, payload.speed)
+}
+
+function onScratchEnd() {
+  endScratch()
+}
+
 function onStop() {
   stop()
   playing.value = false
 }
 
+onMounted(() => {
+  updateTurntableHeight()
+  tvResizeObserver = new ResizeObserver(updateTurntableHeight)
+  if (tvScreen.value?.$el) {
+    tvResizeObserver.observe(tvScreen.value.$el as HTMLElement)
+  }
+})
+
 onBeforeUnmount(() => {
   stop()
+  tvResizeObserver?.disconnect()
 })
 </script>
 
@@ -67,8 +99,16 @@ onBeforeUnmount(() => {
     </h1>
 
     <div class="stage">
-      <TvScreen :gif="currentGif" :playing="playing" />
-      <Turntable :playing="playing" :label-color="labelColor" @hit-me="onHitMe" />
+      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" />
+      <Turntable
+        :playing="playing"
+        :label-color="labelColor"
+        :height="turntableHeight"
+        @hit-me="onHitMe"
+        @scratch-start="onScratchStart"
+        @scratch-move="onScratchMove"
+        @scratch-end="onScratchEnd"
+      />
     </div>
 
     <div class="controls">
@@ -84,32 +124,34 @@ onBeforeUnmount(() => {
         </button>
       </template>
 
-      <div class="volume">
-        <label for="volume">🔈</label>
-        <input
-          id="volume"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="volume"
-          @input="onVolumeInput"
-        >
-        <span>🔊</span>
-      </div>
+      <div class="sliders">
+        <div class="volume">
+          <label for="volume">🔈</label>
+          <input
+            id="volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            :value="volume"
+            @input="onVolumeInput"
+          >
+          <span>🔊</span>
+        </div>
 
-      <div class="pitch">
-        <label for="pitch">PITCH</label>
-        <input
-          id="pitch"
-          type="range"
-          min="-5"
-          max="5"
-          step="0.1"
-          :value="pitch"
-          @input="onPitchInput"
-        >
-        <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
+        <div class="pitch">
+          <label for="pitch">PITCH</label>
+          <input
+            id="pitch"
+            type="range"
+            min="-5"
+            max="5"
+            step="0.1"
+            :value="pitch"
+            @input="onPitchInput"
+          >
+          <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
+        </div>
       </div>
     </div>
 
@@ -212,10 +254,28 @@ onBeforeUnmount(() => {
   outline-offset: 3px;
 }
 
-.volume {
-  display: flex;
+.sliders {
+  display: grid;
+  grid-template-columns: auto auto auto;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: center;
+  row-gap: 0.7rem;
+  column-gap: 0.6rem;
+}
+
+.volume,
+.pitch {
+  display: contents;
+}
+
+.volume label,
+.pitch label {
+  justify-self: end;
+  color: #eee;
+  font-size: 1.1rem;
+}
+
+.volume span {
   color: #eee;
   font-size: 1.1rem;
 }
@@ -224,14 +284,6 @@ onBeforeUnmount(() => {
   width: 160px;
   accent-color: #e8e8e8;
   cursor: pointer;
-}
-
-.pitch {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  color: #eee;
-  font-size: 1.1rem;
 }
 
 .pitch label {

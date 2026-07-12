@@ -26,7 +26,6 @@ defineProps<{
         </div>
         <div class="scanlines" />
       </div>
-      <div class="dial" />
     </div>
   </div>
 </template>
@@ -135,14 +134,6 @@ defineProps<{
     transparent 3px
   );
   mix-blend-mode: multiply;
-}
-
-.dial {
-  width: 14%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ddd, #888);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
 @media (prefers-reduced-motion: reduce) {
