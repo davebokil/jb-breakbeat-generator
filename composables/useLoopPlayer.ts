@@ -6,6 +6,7 @@ export function useLoopPlayer() {
   let gainNode: GainNode | null = null
   let playToken = 0
   let volume = 0.8
+  let pitchSemitones = 0
   const bufferCache = new Map<string, AudioBuffer>()
 
   function getContext() {
@@ -21,6 +22,11 @@ export function useLoopPlayer() {
   function setVolume(value: number) {
     volume = Math.min(1, Math.max(0, value))
     if (gainNode) gainNode.gain.value = volume
+  }
+
+  function setPitch(semitones: number) {
+    pitchSemitones = Math.min(5, Math.max(-5, semitones))
+    if (source) source.detune.value = pitchSemitones * 100
   }
 
   function stop() {
@@ -56,9 +62,10 @@ export function useLoopPlayer() {
     source = ctx.createBufferSource()
     source.buffer = buffer
     source.loop = true
+    source.detune.value = pitchSemitones * 100
     source.connect(gainNode!)
     source.start(0)
   }
 
-  return { play, stop, setVolume }
+  return { play, stop, setVolume, setPitch }
 }

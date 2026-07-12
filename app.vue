@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { pickTrack, pickGif, pickLabelColor } = useBreakbeats()
-const { play, stop, setVolume } = useLoopPlayer()
+const { play, stop, setVolume, setPitch } = useLoopPlayer()
 
 const playing = ref(false)
 const currentTrack = ref<string | null>(null)
@@ -8,11 +8,18 @@ const currentGif = ref<string | null>(null)
 const labelColor = ref(pickLabelColor())
 const errorMessage = ref('')
 const volume = ref(0.8)
+const pitch = ref(0)
 
 function onVolumeInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   volume.value = value
   setVolume(value)
+}
+
+function onPitchInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  pitch.value = value
+  setPitch(value)
 }
 
 async function startPlaying(track: string, gif: string) {
@@ -70,7 +77,7 @@ onBeforeUnmount(() => {
       </button>
       <template v-else>
         <p class="hint">
-          Click the record to <strong>HIT MEH!</strong> for another break
+          Click <strong>HIT MEH!</strong> for another break
         </p>
         <button class="stop-button" type="button" @click="onStop">
           ■ STOP
@@ -89,6 +96,20 @@ onBeforeUnmount(() => {
           @input="onVolumeInput"
         >
         <span>🔊</span>
+      </div>
+
+      <div class="pitch">
+        <label for="pitch">PITCH</label>
+        <input
+          id="pitch"
+          type="range"
+          min="-5"
+          max="5"
+          step="0.1"
+          :value="pitch"
+          @input="onPitchInput"
+        >
+        <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
       </div>
     </div>
 
@@ -203,6 +224,32 @@ onBeforeUnmount(() => {
   width: 160px;
   accent-color: #e8e8e8;
   cursor: pointer;
+}
+
+.pitch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #eee;
+  font-size: 1.1rem;
+}
+
+.pitch label {
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.pitch input[type='range'] {
+  width: 160px;
+  accent-color: #e8e8e8;
+  cursor: pointer;
+}
+
+.pitch-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: left;
 }
 
 .error {
