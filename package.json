@@ -1,7 +1,7 @@
 {
   "name": "jb-breakbeat-generator",
   "version": "2.0.0",
-  "description": "The James Brown Breakbeat Generator - a one-page homage to the Godfather of Soul",
+  "description": "The Godfather of Soul Breakbeat Generator - a one-page homage to the Godfather of Soul",
   "private": true,
   "type": "module",
   "scripts": {

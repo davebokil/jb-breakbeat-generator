@@ -1,6 +1,6 @@
 const siteUrl = 'https://jb-breakbeat-generator.vercel.app/'
-const siteName = 'The James Brown Breakbeat Generator'
-const siteDescription = 'Spin, scratch, and squash classic James Brown breakbeats right in your browser. A free interactive drum break sampler with reverb, glue compression, tape saturation, and pitch/scratch control - no download, no signup.'
+const siteName = 'The Godfather of Soul Breakbeat Generator'
+const siteDescription = 'Spin, scratch, and squash classic Godfather of Soul breakbeats right in your browser. A free interactive drum break sampler with reverb, glue compression, tape saturation, and pitch/scratch control - no download, no signup.'
 const ogImageUrl = 'https://jb-breakbeat-generator.vercel.app/og-image.jpg'
 
 export default defineNuxtConfig({
@@ -16,7 +16,7 @@ export default defineNuxtConfig({
       ],
       meta: [
         { name: 'description', content: siteDescription },
-        { name: 'keywords', content: 'breakbeat generator, James Brown breaks, funky drummer, drum break sampler, hip hop breakbeats, DJ scratch simulator, online turntable, drum loop tape saturation, glue compression' },
+        { name: 'keywords', content: 'breakbeat generator, Godfather of Soul breaks, funky drummer, drum break sampler, hip hop breakbeats, DJ scratch simulator, online turntable, drum loop tape saturation, glue compression' },
         { name: 'robots', content: 'index, follow' },
         { name: 'theme-color', content: '#1a1a1a' },
 
@@ -52,7 +52,7 @@ gtag('config', 'G-X5FFRMY8Y4');`
             '@type': 'WebApplication',
             name: siteName,
             url: siteUrl,
-            description: 'A free browser-based breakbeat sampler and scratch turntable, built as a fan homage to James Brown\'s classic funk drum breaks.',
+            description: 'A free browser-based breakbeat sampler and scratch turntable, built as a fan homage to the Godfather of Soul\'s classic funk drum breaks.',
             applicationCategory: 'MultimediaApplication',
             operatingSystem: 'Any (runs in a web browser)',
             browserRequirements: 'Requires JavaScript and the Web Audio API',

@@ -18,7 +18,7 @@ defineProps<{
           v-if="playing && gif"
           :key="gif"
           :src="gif"
-          alt="James Brown breakbeat gif"
+          alt="Godfather of Soul breakbeat gif"
           class="screen-gif"
         >
         <div v-else class="static">

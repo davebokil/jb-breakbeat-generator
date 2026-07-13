@@ -14,12 +14,18 @@ export function useLoopPlayer() {
   let compressionBus: GainNode | null = null
   let convolverNode: ConvolverNode | null = null
   let reverbWetGain: GainNode | null = null
+  let lowShelfNode: BiquadFilterNode | null = null
+  let midPeakNode: BiquadFilterNode | null = null
+  let highShelfNode: BiquadFilterNode | null = null
   let playToken = 0
   let volume = 0.8
   let pitchSemitones = 0
   let reverbAmount = 0
   let compressionAmount = 0
   let overdriveAmount = 0
+  let lowGainDb = 0
+  let midGainDb = 0
+  let highGainDb = 0
   let forwardBuffer: AudioBuffer | null = null
   let reversedBuffer: AudioBuffer | null = null
   // context.currentTime at which the current forward loop would have started
@@ -57,7 +63,7 @@ export function useLoopPlayer() {
 
   // Algorithmic impulse response (exponentially-decaying noise) so reverb
   // doesn't need an external audio file to convolve against.
-  function makeImpulseResponse(ctx: AudioContext, duration = 2.5, decay = 3) {
+  function makeImpulseResponse(ctx: BaseAudioContext, duration = 2.5, decay = 3) {
     const rate = ctx.sampleRate
     const length = Math.floor(rate * duration)
     const impulse = ctx.createBuffer(2, length, rate)
@@ -70,76 +76,174 @@ export function useLoopPlayer() {
     return impulse
   }
 
+  interface EffectsGraphNodes {
+    gainNode: GainNode
+    compressionBus: GainNode
+    compressionDryGain: GainNode
+    compressorNode: DynamicsCompressorNode
+    compressorMakeupGain: GainNode
+    compressionWetGain: GainNode
+    distortionNode: WaveShaperNode
+    distortionToneFilter: BiquadFilterNode
+    distortionWetGain: GainNode
+    convolverNode: ConvolverNode
+    reverbWetGain: GainNode
+    lowShelfNode: BiquadFilterNode
+    midPeakNode: BiquadFilterNode
+    highShelfNode: BiquadFilterNode
+  }
+
+  interface EffectsGraphParams {
+    volume: number
+    reverbAmount: number
+    compressionAmount: number
+    overdriveAmount: number
+    lowGainDb: number
+    midGainDb: number
+    highGainDb: number
+  }
+
+  // Builds the full effects chain on any BaseAudioContext (live AudioContext
+  // for playback, or an OfflineAudioContext for rendering a download) so the
+  // two never drift apart: source -> [compressionDryGain, compressorNode] ->
+  // compressionBus -> gainNode -> destination, with distortion and reverb as
+  // parallel sends off compressionBus. See connectSourceToEffects for how a
+  // source node feeds in.
+  function buildEffectsGraph(ctx: BaseAudioContext, params: EffectsGraphParams): EffectsGraphNodes {
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = params.volume
+
+    // Master 3-band EQ, applied last so it shapes the full mix (dry +
+    // compression + distortion + reverb) rather than just the dry signal.
+    const lowShelfNode = ctx.createBiquadFilter()
+    lowShelfNode.type = 'lowshelf'
+    lowShelfNode.frequency.value = 250
+    lowShelfNode.gain.value = params.lowGainDb
+
+    const midPeakNode = ctx.createBiquadFilter()
+    midPeakNode.type = 'peaking'
+    midPeakNode.frequency.value = 1000
+    midPeakNode.Q.value = 1
+    midPeakNode.gain.value = params.midGainDb
+
+    const highShelfNode = ctx.createBiquadFilter()
+    highShelfNode.type = 'highshelf'
+    highShelfNode.frequency.value = 4000
+    highShelfNode.gain.value = params.highGainDb
+
+    gainNode.connect(lowShelfNode)
+    lowShelfNode.connect(midPeakNode)
+    midPeakNode.connect(highShelfNode)
+    highShelfNode.connect(ctx.destination)
+
+    // Compression is a true crossfade (dry fades out as wet fades in), not a
+    // parallel add like the sends below - the compressor has an internal
+    // lookahead delay, so if an untouched copy of the source stayed
+    // connected straight to gainNode at full level, it would sum against a
+    // time-shifted compressed copy and comb-filter (heard as flanging).
+    // Everything downstream (distortion, reverb) taps off this
+    // post-compression bus instead of the raw source.
+    const compressionBus = ctx.createGain()
+    compressionBus.connect(gainNode)
+
+    const compressionDryGain = ctx.createGain()
+    compressionDryGain.connect(compressionBus)
+
+    // Knee and attack stay fixed - attack in particular is what lets each
+    // hit's transient punch through before the squash grabs the body, and
+    // that shouldn't change as the knob moves. Threshold, ratio, release
+    // and makeup gain are set dynamically by applyCompressionAmountTo below,
+    // so pushing the knob up doesn't just crossfade in more of one fixed
+    // amount of compression - it makes the compression itself deeper.
+    const compressorNode = ctx.createDynamicsCompressor()
+    compressorNode.knee.value = 6
+    compressorNode.attack.value = 0.01
+    // DynamicsCompressorNode has no automatic makeup gain, so the
+    // compressed signal comes out quieter than the dry signal it crossfades
+    // against - without boosting it back up, full wet would sound like a
+    // level drop rather than a squash.
+    const compressorMakeupGain = ctx.createGain()
+    const compressionWetGain = ctx.createGain()
+    compressorNode.connect(compressorMakeupGain)
+    compressorMakeupGain.connect(compressionWetGain)
+    compressionWetGain.connect(compressionBus)
+
+    // Distortion and reverb stay parallel sends: an untouched copy always
+    // reaches gainNode via compressionBus, and each effect mixes a
+    // processed copy on top, scaled by that effect's slider (0 = no
+    // effect). WaveShaper has no lookahead and reverb's diffuse tail
+    // doesn't comb-filter the way a compressed transient does, so parallel
+    // mixing is fine for these two.
+    const distortionNode = ctx.createWaveShaper()
+    distortionNode.oversample = '4x'
+    // Tape heads roll off the top end - a gentle lowpass after the
+    // saturation curve tames the harmonics tanh adds up top and keeps the
+    // drive sounding warm instead of fizzy/harsh as it's pushed harder.
+    const distortionToneFilter = ctx.createBiquadFilter()
+    distortionToneFilter.type = 'lowpass'
+    distortionToneFilter.frequency.value = 8500
+    distortionToneFilter.Q.value = 0.7
+    const distortionWetGain = ctx.createGain()
+    compressionBus.connect(distortionNode)
+    distortionNode.connect(distortionToneFilter)
+    distortionToneFilter.connect(distortionWetGain)
+    distortionWetGain.connect(gainNode)
+
+    const convolverNode = ctx.createConvolver()
+    convolverNode.buffer = makeImpulseResponse(ctx)
+    const reverbWetGain = ctx.createGain()
+    compressionBus.connect(convolverNode)
+    convolverNode.connect(reverbWetGain)
+    reverbWetGain.connect(gainNode)
+
+    const nodes: EffectsGraphNodes = {
+      gainNode,
+      compressionBus,
+      compressionDryGain,
+      compressorNode,
+      compressorMakeupGain,
+      compressionWetGain,
+      distortionNode,
+      distortionToneFilter,
+      distortionWetGain,
+      convolverNode,
+      reverbWetGain,
+      lowShelfNode,
+      midPeakNode,
+      highShelfNode,
+    }
+    applyCompressionAmountTo(nodes, params.compressionAmount)
+    applyOverdriveAmountTo(nodes, params.overdriveAmount)
+    reverbWetGain.gain.value = params.reverbAmount
+    return nodes
+  }
+
   function getContext() {
     if (!context) {
       context = new (window.AudioContext || (window as any).webkitAudioContext)()
-
-      gainNode = context.createGain()
-      gainNode.gain.value = volume
-      gainNode.connect(context.destination)
-
-      // Compression is a true crossfade (dry fades out as wet fades in),
-      // not a parallel add like the sends below - the compressor has an
-      // internal lookahead delay, so if an untouched copy of the source
-      // stayed connected straight to gainNode at full level, it would sum
-      // against a time-shifted compressed copy and comb-filter (heard as
-      // flanging). Everything downstream (distortion, reverb) now taps off
-      // this post-compression bus instead of the raw source.
-      compressionBus = context.createGain()
-      compressionBus.connect(gainNode)
-
-      compressionDryGain = context.createGain()
-      compressionDryGain.connect(compressionBus)
-
-      // Knee and attack stay fixed - attack in particular is what lets each
-      // hit's transient punch through before the squash grabs the body, and
-      // that shouldn't change as the knob moves. Threshold, ratio, release
-      // and makeup gain are set dynamically by applyCompressionAmount below,
-      // so pushing the knob up doesn't just crossfade in more of one fixed
-      // amount of compression - it makes the compression itself deeper.
-      compressorNode = context.createDynamicsCompressor()
-      compressorNode.knee.value = 6
-      compressorNode.attack.value = 0.01
-      // DynamicsCompressorNode has no automatic makeup gain, so the
-      // compressed signal comes out quieter than the dry signal it
-      // crossfades against - without boosting it back up, full wet would
-      // sound like a level drop rather than a squash.
-      compressorMakeupGain = context.createGain()
-      compressionWetGain = context.createGain()
-      compressorNode.connect(compressorMakeupGain)
-      compressorMakeupGain.connect(compressionWetGain)
-      compressionWetGain.connect(compressionBus)
-      applyCompressionAmount(compressionAmount)
-
-      // Distortion and reverb stay parallel sends: an untouched copy always
-      // reaches gainNode via compressionBus, and each effect mixes a
-      // processed copy on top, scaled by that effect's slider (0 = no
-      // effect). WaveShaper has no lookahead and reverb's diffuse tail
-      // doesn't comb-filter the way a compressed transient does, so parallel
-      // mixing is fine for these two.
-      distortionNode = context.createWaveShaper()
-      distortionNode.oversample = '4x'
-      // Tape heads roll off the top end - a gentle lowpass after the
-      // saturation curve tames the harmonics tanh adds up top and keeps the
-      // drive sounding warm instead of fizzy/harsh as it's pushed harder.
-      distortionToneFilter = context.createBiquadFilter()
-      distortionToneFilter.type = 'lowpass'
-      distortionToneFilter.frequency.value = 8500
-      distortionToneFilter.Q.value = 0.7
-      distortionWetGain = context.createGain()
-      compressionBus.connect(distortionNode)
-      distortionNode.connect(distortionToneFilter)
-      distortionToneFilter.connect(distortionWetGain)
-      distortionWetGain.connect(gainNode)
-      applyOverdriveAmount(overdriveAmount)
-
-      convolverNode = context.createConvolver()
-      convolverNode.buffer = makeImpulseResponse(context)
-      reverbWetGain = context.createGain()
-      reverbWetGain.gain.value = reverbAmount
-      compressionBus.connect(convolverNode)
-      convolverNode.connect(reverbWetGain)
-      reverbWetGain.connect(gainNode)
+      const nodes = buildEffectsGraph(context, {
+        volume,
+        reverbAmount,
+        compressionAmount,
+        overdriveAmount,
+        lowGainDb,
+        midGainDb,
+        highGainDb,
+      })
+      gainNode = nodes.gainNode
+      compressionBus = nodes.compressionBus
+      compressionDryGain = nodes.compressionDryGain
+      compressorNode = nodes.compressorNode
+      compressorMakeupGain = nodes.compressorMakeupGain
+      compressionWetGain = nodes.compressionWetGain
+      distortionNode = nodes.distortionNode
+      distortionToneFilter = nodes.distortionToneFilter
+      distortionWetGain = nodes.distortionWetGain
+      convolverNode = nodes.convolverNode
+      reverbWetGain = nodes.reverbWetGain
+      lowShelfNode = nodes.lowShelfNode
+      midPeakNode = nodes.midPeakNode
+      highShelfNode = nodes.highShelfNode
     }
     return context
   }
@@ -165,23 +269,41 @@ export function useLoopPlayer() {
     if (reverbWetGain) reverbWetGain.gain.value = reverbAmount
   }
 
+  function setLowGain(db: number) {
+    lowGainDb = Math.min(12, Math.max(-12, db))
+    if (lowShelfNode) lowShelfNode.gain.value = lowGainDb
+  }
+
+  function setMidGain(db: number) {
+    midGainDb = Math.min(12, Math.max(-12, db))
+    if (midPeakNode) midPeakNode.gain.value = midGainDb
+  }
+
+  function setHighGain(db: number) {
+    highGainDb = Math.min(12, Math.max(-12, db))
+    if (highShelfNode) highShelfNode.gain.value = highGainDb
+  }
+
   // Ramps threshold down and ratio/makeup up together as the knob rises, so
   // higher settings aren't just "more of the same compression" mixed in -
   // the compression itself gets deeper the further the knob is pushed.
+  function applyCompressionAmountTo(
+    nodes: Pick<EffectsGraphNodes, 'compressorNode' | 'compressorMakeupGain' | 'compressionWetGain' | 'compressionDryGain'>,
+    value: number,
+  ) {
+    nodes.compressorNode.threshold.value = -10 - 22 * value // -10dB barely-there up to -32dB heavily squashed
+    nodes.compressorNode.ratio.value = 3 + 12 * value // 3:1 gentle up to 15:1 near-limiting
+    nodes.compressorNode.release.value = 0.22 - 0.09 * value // pumps back up faster at higher settings
+    nodes.compressorMakeupGain.gain.value = 1.2 + 2.6 * value // more boost needed as gain reduction deepens
+    nodes.compressionWetGain.gain.value = value
+    nodes.compressionDryGain.gain.value = 1 - value
+  }
+
   function applyCompressionAmount(value: number) {
     compressionAmount = value
-    const threshold = -10 - 22 * value // -10dB barely-there up to -32dB heavily squashed
-    const ratio = 3 + 12 * value // 3:1 gentle up to 15:1 near-limiting
-    const release = 0.22 - 0.09 * value // pumps back up faster at higher settings
-    const makeup = 1.2 + 2.6 * value // more boost needed as gain reduction deepens
-    if (compressorNode) {
-      compressorNode.threshold.value = threshold
-      compressorNode.ratio.value = ratio
-      compressorNode.release.value = release
+    if (compressorNode && compressorMakeupGain && compressionWetGain && compressionDryGain) {
+      applyCompressionAmountTo({ compressorNode, compressorMakeupGain, compressionWetGain, compressionDryGain }, value)
     }
-    if (compressorMakeupGain) compressorMakeupGain.gain.value = makeup
-    if (compressionWetGain) compressionWetGain.gain.value = value
-    if (compressionDryGain) compressionDryGain.gain.value = 1 - value
   }
 
   function setCompression(value: number) {
@@ -190,11 +312,20 @@ export function useLoopPlayer() {
 
   // Recomputes the saturation curve so the knob controls drive into the
   // tape-style tanh curve, not just how much of one fixed curve is blended.
+  function applyOverdriveAmountTo(
+    nodes: Pick<EffectsGraphNodes, 'distortionNode' | 'distortionWetGain'>,
+    value: number,
+  ) {
+    const drive = 1 + value * 7 // 1 = barely-there warmth, 8 = thick saturation
+    nodes.distortionNode.curve = makeSaturationCurve(drive)
+    nodes.distortionWetGain.gain.value = value
+  }
+
   function applyOverdriveAmount(value: number) {
     overdriveAmount = value
-    const drive = 1 + value * 7 // 1 = barely-there warmth, 8 = thick saturation
-    if (distortionNode) distortionNode.curve = makeSaturationCurve(drive)
-    if (distortionWetGain) distortionWetGain.gain.value = value
+    if (distortionNode && distortionWetGain) {
+      applyOverdriveAmountTo({ distortionNode, distortionWetGain }, value)
+    }
   }
 
   function setOverdrive(value: number) {
@@ -266,6 +397,35 @@ export function useLoopPlayer() {
     startLoopSource(0)
   }
 
+  // Renders the loop once through an OfflineAudioContext with today's
+  // effect settings baked in, for the download button. A short tail is
+  // added when reverb is on so its decay isn't chopped off at the loop
+  // boundary the way it would be if the buffer just ended mid-decay.
+  async function renderMix(uri: string): Promise<AudioBuffer> {
+    const { forward } = await loadBuffers(uri)
+    const tailSeconds = reverbAmount > 0 ? 2.5 : 0
+    const length = Math.ceil((forward.duration + tailSeconds) * forward.sampleRate)
+    const offlineCtx = new OfflineAudioContext(forward.numberOfChannels, length, forward.sampleRate)
+
+    const nodes = buildEffectsGraph(offlineCtx, {
+      volume,
+      reverbAmount,
+      compressionAmount,
+      overdriveAmount,
+      lowGainDb,
+      midGainDb,
+      highGainDb,
+    })
+    const offlineSource = offlineCtx.createBufferSource()
+    offlineSource.buffer = forward
+    offlineSource.detune.value = pitchSemitones * 100
+    offlineSource.connect(nodes.compressionDryGain)
+    offlineSource.connect(nodes.compressorNode)
+    offlineSource.start(0)
+
+    return offlineCtx.startRendering()
+  }
+
   function getPlayhead(): number {
     if (!forwardBuffer || !context) return 0
     const duration = forwardBuffer.duration
@@ -316,5 +476,20 @@ export function useLoopPlayer() {
     scratchPlayhead = null
   }
 
-  return { play, stop, setVolume, setPitch, setReverb, setCompression, setOverdrive, beginScratch, scratchBy, endScratch }
+  return {
+    play,
+    stop,
+    setVolume,
+    setPitch,
+    setReverb,
+    setCompression,
+    setOverdrive,
+    setLowGain,
+    setMidGain,
+    setHighGain,
+    beginScratch,
+    scratchBy,
+    endScratch,
+    renderMix,
+  }
 }

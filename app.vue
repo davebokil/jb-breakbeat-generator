@@ -8,9 +8,13 @@ const {
   setReverb,
   setCompression,
   setOverdrive,
+  setLowGain,
+  setMidGain,
+  setHighGain,
   beginScratch,
   scratchBy,
   endScratch,
+  renderMix,
 } = useLoopPlayer()
 
 const playing = ref(false)
@@ -23,6 +27,10 @@ const pitch = ref(0)
 const reverb = ref(0)
 const compression = ref(0)
 const overdrive = ref(0)
+const low = ref(0)
+const mid = ref(0)
+const high = ref(0)
+const downloading = ref(false)
 
 const tvScreen = ref<InstanceType<typeof TvScreen> | null>(null)
 const turntableHeight = ref<number | null>(null)
@@ -63,6 +71,24 @@ function onOverdriveInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   overdrive.value = value
   setOverdrive(value)
+}
+
+function onLowInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  low.value = value
+  setLowGain(value)
+}
+
+function onMidInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  mid.value = value
+  setMidGain(value)
+}
+
+function onHighInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  high.value = value
+  setHighGain(value)
 }
 
 async function startPlaying(track: string, gif: string) {
@@ -110,6 +136,28 @@ function onStop() {
   playing.value = false
 }
 
+async function onDownload() {
+  if (!currentTrack.value || downloading.value) return
+  downloading.value = true
+  errorMessage.value = ''
+  try {
+    const buffer = await renderMix(currentTrack.value)
+    const blob = audioBufferToWav(buffer)
+    const trackName = currentTrack.value.split('/').pop()?.replace(/\.\w+$/, '') ?? 'breakbeat'
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${trackName}-breakbeat-mix.wav`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    errorMessage.value = "Couldn't render that download, try again."
+    console.error(err)
+  } finally {
+    downloading.value = false
+  }
+}
+
 onMounted(() => {
   updateTurntableHeight()
   tvResizeObserver = new ResizeObserver(updateTurntableHeight)
@@ -127,12 +175,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="page">
     <h1 class="title" :style="{ color: labelColor }">
-      THE JAMES BROWN BREAKBEAT GENERATOR
+      THE GODFATHER OF SOUL BREAKBEAT GENERATOR
     </h1>
     <p class="intro">
-      A free browser-based breakbeat sampler: spin a classic James Brown drum break,
-      scratch it live on the virtual turntable, and shape it with reverb, glue
-      compression, tape saturation, and pitch control.
+      A free browser-based breakbeat generator. Instantly generate random classic breaks from the Godfather of Soul, scratch them on a virtual turntable, add reverb, tape saturation, glue compression, and pitch effects, then export your finished break.
     </p>
 
     <div class="stage">
@@ -156,18 +202,29 @@ onBeforeUnmount(() => {
         <p class="hint">
           Click <strong>HIT MEH!</strong> for another break
         </p>
-        <button class="stop-button" type="button" @click="onStop">
-          ■ STOP
-        </button>
+        <div class="playing-actions">
+          <button class="stop-button" type="button" @click="onStop">
+            ■ STOP
+          </button>
+          <button
+            class="download-button"
+            type="button"
+            :disabled="downloading"
+            @click="onDownload"
+          >
+            {{ downloading ? 'RENDERING…' : '⬇ DOWNLOAD' }}
+          </button>
+        </div>
       </template>
 
       <fieldset class="effects">
         <legend>EFFECTS</legend>
         <div class="sliders">
           <div class="volume">
-            <label for="volume">🔈</label>
+            <label for="volume">VOLUME</label>
             <input
               id="volume"
+              class="fx-slider"
               type="range"
               min="0"
               max="1"
@@ -175,13 +232,14 @@ onBeforeUnmount(() => {
               :value="volume"
               @input="onVolumeInput"
             >
-            <span>🔊</span>
+            <span class="effect-value">{{ Math.round(volume * 100) }}%</span>
           </div>
 
           <div class="pitch">
             <label for="pitch">PITCH</label>
             <input
               id="pitch"
+              class="fx-slider"
               type="range"
               min="-5"
               max="5"
@@ -196,6 +254,7 @@ onBeforeUnmount(() => {
             <label for="reverb">REVERB</label>
             <input
               id="reverb"
+              class="fx-slider"
               type="range"
               min="0"
               max="1"
@@ -210,6 +269,7 @@ onBeforeUnmount(() => {
             <label for="compression">COMP</label>
             <input
               id="compression"
+              class="fx-slider"
               type="range"
               min="0"
               max="1"
@@ -224,6 +284,7 @@ onBeforeUnmount(() => {
             <label for="overdrive">DRIVE</label>
             <input
               id="overdrive"
+              class="fx-slider"
               type="range"
               min="0"
               max="1"
@@ -232,6 +293,51 @@ onBeforeUnmount(() => {
               @input="onOverdriveInput"
             >
             <span class="effect-value">{{ Math.round(overdrive * 100) }}%</span>
+          </div>
+
+          <div class="low">
+            <label for="low">LOW</label>
+            <input
+              id="low"
+              class="fx-slider"
+              type="range"
+              min="-12"
+              max="12"
+              step="1"
+              :value="low"
+              @input="onLowInput"
+            >
+            <span class="effect-value">{{ low > 0 ? '+' : '' }}{{ low }}dB</span>
+          </div>
+
+          <div class="mid">
+            <label for="mid">MID</label>
+            <input
+              id="mid"
+              class="fx-slider"
+              type="range"
+              min="-12"
+              max="12"
+              step="1"
+              :value="mid"
+              @input="onMidInput"
+            >
+            <span class="effect-value">{{ mid > 0 ? '+' : '' }}{{ mid }}dB</span>
+          </div>
+
+          <div class="high">
+            <label for="high">HIGH</label>
+            <input
+              id="high"
+              class="fx-slider"
+              type="range"
+              min="-12"
+              max="12"
+              step="1"
+              :value="high"
+              @input="onHighInput"
+            >
+            <span class="effect-value">{{ high > 0 ? '+' : '' }}{{ high }}dB</span>
           </div>
         </div>
       </fieldset>
@@ -344,6 +450,40 @@ onBeforeUnmount(() => {
   outline-offset: 3px;
 }
 
+.playing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  justify-content: center;
+}
+
+.download-button {
+  font-size: 1.1rem;
+  font-weight: bold;
+  padding: 0.6rem 1.6rem;
+  border: 2px solid #e8e8e8;
+  border-radius: 50px;
+  background: transparent;
+  color: #e8e8e8;
+  cursor: pointer;
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.download-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.download-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.download-button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
 .effects {
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 12px;
@@ -371,7 +511,10 @@ onBeforeUnmount(() => {
 .pitch,
 .reverb,
 .compression,
-.overdrive {
+.overdrive,
+.low,
+.mid,
+.high {
   display: contents;
 }
 
@@ -379,7 +522,10 @@ onBeforeUnmount(() => {
 .pitch label,
 .reverb label,
 .compression label,
-.overdrive label {
+.overdrive label,
+.low label,
+.mid label,
+.high label {
   justify-self: end;
   color: #eee;
   font-size: 0.85rem;
@@ -387,25 +533,46 @@ onBeforeUnmount(() => {
   letter-spacing: 0.05em;
 }
 
-.volume label {
-  font-size: 1.1rem;
-  font-weight: normal;
-  letter-spacing: normal;
-}
-
-.volume span {
-  color: #eee;
-  font-size: 1.1rem;
-}
-
-.volume input[type='range'],
-.pitch input[type='range'],
-.reverb input[type='range'],
-.compression input[type='range'],
-.overdrive input[type='range'] {
+.fx-slider {
   width: 160px;
+  height: 32px;
+  margin: 0;
+  background: transparent;
   accent-color: #e8e8e8;
   cursor: pointer;
+  touch-action: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.fx-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #555;
+}
+
+.fx-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
+  border: none;
+  border-radius: 50%;
+  background: #e8e8e8;
+}
+
+.fx-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #555;
+}
+
+.fx-slider::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: #e8e8e8;
 }
 
 .pitch-value,
