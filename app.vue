@@ -1,6 +1,17 @@
 <script setup lang="ts">
 const { pickTrack, pickGif, pickLabelColor } = useBreakbeats()
-const { play, stop, setVolume, setPitch, beginScratch, scratchBy, endScratch } = useLoopPlayer()
+const {
+  play,
+  stop,
+  setVolume,
+  setPitch,
+  setReverb,
+  setCompression,
+  setOverdrive,
+  beginScratch,
+  scratchBy,
+  endScratch,
+} = useLoopPlayer()
 
 const playing = ref(false)
 const currentTrack = ref<string | null>(null)
@@ -9,6 +20,9 @@ const labelColor = ref(pickLabelColor())
 const errorMessage = ref('')
 const volume = ref(0.8)
 const pitch = ref(0)
+const reverb = ref(0)
+const compression = ref(0)
+const overdrive = ref(0)
 
 const tvScreen = ref<InstanceType<typeof TvScreen> | null>(null)
 const turntableHeight = ref<number | null>(null)
@@ -31,6 +45,24 @@ function onPitchInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   pitch.value = value
   setPitch(value)
+}
+
+function onReverbInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  reverb.value = value
+  setReverb(value)
+}
+
+function onCompressionInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  compression.value = value
+  setCompression(value)
+}
+
+function onOverdriveInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  overdrive.value = value
+  setOverdrive(value)
 }
 
 async function startPlaying(track: string, gif: string) {
@@ -97,6 +129,11 @@ onBeforeUnmount(() => {
     <h1 class="title" :style="{ color: labelColor }">
       THE JAMES BROWN BREAKBEAT GENERATOR
     </h1>
+    <p class="intro">
+      A free browser-based breakbeat sampler: spin a classic James Brown drum break,
+      scratch it live on the virtual turntable, and shape it with reverb, glue
+      compression, tape saturation, and pitch control.
+    </p>
 
     <div class="stage">
       <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" />
@@ -124,35 +161,80 @@ onBeforeUnmount(() => {
         </button>
       </template>
 
-      <div class="sliders">
-        <div class="volume">
-          <label for="volume">🔈</label>
-          <input
-            id="volume"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            :value="volume"
-            @input="onVolumeInput"
-          >
-          <span>🔊</span>
-        </div>
+      <fieldset class="effects">
+        <legend>EFFECTS</legend>
+        <div class="sliders">
+          <div class="volume">
+            <label for="volume">🔈</label>
+            <input
+              id="volume"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="volume"
+              @input="onVolumeInput"
+            >
+            <span>🔊</span>
+          </div>
 
-        <div class="pitch">
-          <label for="pitch">PITCH</label>
-          <input
-            id="pitch"
-            type="range"
-            min="-5"
-            max="5"
-            step="0.1"
-            :value="pitch"
-            @input="onPitchInput"
-          >
-          <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
+          <div class="pitch">
+            <label for="pitch">PITCH</label>
+            <input
+              id="pitch"
+              type="range"
+              min="-5"
+              max="5"
+              step="0.1"
+              :value="pitch"
+              @input="onPitchInput"
+            >
+            <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
+          </div>
+
+          <div class="reverb">
+            <label for="reverb">REVERB</label>
+            <input
+              id="reverb"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="reverb"
+              @input="onReverbInput"
+            >
+            <span class="effect-value">{{ Math.round(reverb * 100) }}%</span>
+          </div>
+
+          <div class="compression">
+            <label for="compression">COMP</label>
+            <input
+              id="compression"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="compression"
+              @input="onCompressionInput"
+            >
+            <span class="effect-value">{{ Math.round(compression * 100) }}%</span>
+          </div>
+
+          <div class="overdrive">
+            <label for="overdrive">DRIVE</label>
+            <input
+              id="overdrive"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="overdrive"
+              @input="onOverdriveInput"
+            >
+            <span class="effect-value">{{ Math.round(overdrive * 100) }}%</span>
+          </div>
         </div>
-      </div>
+      </fieldset>
     </div>
 
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
@@ -182,6 +264,14 @@ onBeforeUnmount(() => {
   margin: 0;
   animation: flash 1.6s infinite;
   transition: color 0.3s;
+}
+
+.intro {
+  max-width: 560px;
+  margin: -1.5rem 0 0;
+  color: #aaa;
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 .stage {
@@ -254,6 +344,20 @@ onBeforeUnmount(() => {
   outline-offset: 3px;
 }
 
+.effects {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  padding: 1.2rem 1.5rem 0.8rem;
+}
+
+.effects legend {
+  padding: 0 0.6rem;
+  color: #eee;
+  font-size: 0.8rem;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+}
+
 .sliders {
   display: grid;
   grid-template-columns: auto auto auto;
@@ -264,15 +368,29 @@ onBeforeUnmount(() => {
 }
 
 .volume,
-.pitch {
+.pitch,
+.reverb,
+.compression,
+.overdrive {
   display: contents;
 }
 
 .volume label,
-.pitch label {
+.pitch label,
+.reverb label,
+.compression label,
+.overdrive label {
   justify-self: end;
   color: #eee;
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.volume label {
   font-size: 1.1rem;
+  font-weight: normal;
+  letter-spacing: normal;
 }
 
 .volume span {
@@ -280,26 +398,20 @@ onBeforeUnmount(() => {
   font-size: 1.1rem;
 }
 
-.volume input[type='range'] {
+.volume input[type='range'],
+.pitch input[type='range'],
+.reverb input[type='range'],
+.compression input[type='range'],
+.overdrive input[type='range'] {
   width: 160px;
   accent-color: #e8e8e8;
   cursor: pointer;
 }
 
-.pitch label {
-  font-size: 0.85rem;
-  font-weight: bold;
-  letter-spacing: 0.05em;
-}
-
-.pitch input[type='range'] {
-  width: 160px;
-  accent-color: #e8e8e8;
-  cursor: pointer;
-}
-
-.pitch-value {
+.pitch-value,
+.effect-value {
   font-variant-numeric: tabular-nums;
+  color: #eee;
   min-width: 3.2em;
   text-align: left;
 }
