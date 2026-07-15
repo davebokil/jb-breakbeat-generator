@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jb-breakbeat-generator.vercel.app/sitemap.xml
+Sitemap: https://breaks.davebokil.com/sitemap.xml

@@ -1,7 +1,7 @@
-const siteUrl = 'https://jb-breakbeat-generator.vercel.app/'
+const siteUrl = 'https://breaks.davebokil.com/'
 const siteName = 'The Godfather of Soul Breakbeat Generator'
 const siteDescription = 'Spin, scratch, and squash classic Godfather of Soul breakbeats right in your browser. A free interactive drum break sampler with reverb, glue compression, tape saturation, and pitch/scratch control - no download, no signup.'
-const ogImageUrl = 'https://jb-breakbeat-generator.vercel.app/og-image.jpg'
+const ogImageUrl = 'https://breaks.davebokil.com/og-image.jpg'
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-07-11',
