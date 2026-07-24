@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
     </p>
 
     <div class="stage">
-      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" />
+      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" />
       <Turntable
         :playing="playing"
         :label-color="labelColor"

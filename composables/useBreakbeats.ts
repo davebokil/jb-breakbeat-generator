@@ -1,4 +1,5 @@
 const AUDIO_TRACKS = [
+  '/audio/bemyself.wav',
   '/audio/cold.wav',
   '/audio/csl1.wav',
   '/audio/csl2.wav',

@@ -1,8 +1,43 @@
 <script setup lang="ts">
-defineProps<{
+const props = withDefaults(defineProps<{
   gif: string | null
   playing: boolean
-}>()
+  pitch?: number
+  reverb?: number
+  overdrive?: number
+}>(), {
+  pitch: 0,
+  reverb: 0,
+  overdrive: 0,
+})
+
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+const showScreen = computed(() => props.playing && !!props.gif)
+
+const player = useGifPlayer(() => canvasEl.value)
+
+// Pitch doubles/halves playback speed per +/-2.5 semitones, echoing the
+// classic "speeding up tape raises pitch" association rather than a literal
+// audio-rate link (pitch only detunes the audio, it doesn't change tempo).
+const speed = computed(() => 2 ** (props.pitch / 2.5))
+
+watch(speed, value => player.setSpeed(value), { immediate: true })
+watch(() => props.reverb, value => player.setEcho(value), { immediate: true })
+watch(() => props.overdrive, value => player.setGrain(value), { immediate: true })
+
+watch(
+  [() => props.playing, () => props.gif],
+  ([isPlaying, gif]) => {
+    if (isPlaying && gif) {
+      player.load(gif)
+    } else {
+      player.stop()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => player.stop())
 </script>
 
 <template>
@@ -14,14 +49,14 @@ defineProps<{
 
     <div class="cabinet">
       <div class="screen">
-        <img
-          v-if="playing && gif"
-          :key="gif"
-          :src="gif"
-          alt="Godfather of Soul breakbeat gif"
+        <canvas
+          v-show="showScreen"
+          ref="canvasEl"
+          role="img"
+          aria-label="Godfather of Soul breakbeat gif"
           class="screen-gif"
-        >
-        <div v-else class="static">
+        />
+        <div v-if="!showScreen" class="static">
           <span class="no-signal">NO SIGNAL</span>
         </div>
         <div class="scanlines" />

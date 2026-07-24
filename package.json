@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/davebokil/jb-breakbeat-generator#readme",
   "dependencies": {
+    "gifuct-js": "^2.1.2",
     "nuxt": "^3.13.0",
     "vue": "^3.4.0",
     "vue-router": "^4.4.0"
