@@ -6,11 +6,19 @@ const props = withDefaults(defineProps<{
   pitch?: number
   reverb?: number
   overdrive?: number
+  filter?: number
+  low?: number
+  mid?: number
+  high?: number
 }>(), {
   recordName: 'breakbeat',
   pitch: 0,
   reverb: 0,
   overdrive: 0,
+  filter: 0,
+  low: 0,
+  mid: 0,
+  high: 0,
 })
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
@@ -26,6 +34,10 @@ const speed = computed(() => 2 ** (props.pitch / 2.5))
 watch(speed, value => player.setSpeed(value), { immediate: true })
 watch(() => props.reverb, value => player.setEcho(value), { immediate: true })
 watch(() => props.overdrive, value => player.setGrain(value), { immediate: true })
+watch(() => props.filter, value => player.setFilter(value), { immediate: true })
+watch(() => props.low, value => player.setLowGain(value), { immediate: true })
+watch(() => props.mid, value => player.setMidGain(value), { immediate: true })
+watch(() => props.high, value => player.setHighGain(value), { immediate: true })
 
 watch(
   [() => props.playing, () => props.gif],

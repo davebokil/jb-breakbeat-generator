@@ -17,6 +17,7 @@ export function useLoopPlayer() {
   let lowShelfNode: BiquadFilterNode | null = null
   let midPeakNode: BiquadFilterNode | null = null
   let highShelfNode: BiquadFilterNode | null = null
+  let sweepFilterNode: BiquadFilterNode | null = null
   let playToken = 0
   let volume = 0.8
   let pitchSemitones = 0
@@ -26,6 +27,7 @@ export function useLoopPlayer() {
   let lowGainDb = 0
   let midGainDb = 0
   let highGainDb = 0
+  let filterAmount = 0
   let forwardBuffer: AudioBuffer | null = null
   let reversedBuffer: AudioBuffer | null = null
   // context.currentTime at which the current forward loop would have started
@@ -91,6 +93,7 @@ export function useLoopPlayer() {
     lowShelfNode: BiquadFilterNode
     midPeakNode: BiquadFilterNode
     highShelfNode: BiquadFilterNode
+    sweepFilterNode: BiquadFilterNode
   }
 
   interface EffectsGraphParams {
@@ -101,6 +104,7 @@ export function useLoopPlayer() {
     lowGainDb: number
     midGainDb: number
     highGainDb: number
+    filterAmount: number
   }
 
   // Builds the full effects chain on any BaseAudioContext (live AudioContext
@@ -131,10 +135,18 @@ export function useLoopPlayer() {
     highShelfNode.frequency.value = 4000
     highShelfNode.gain.value = params.highGainDb
 
+    // Master filter sweep, wired last so it colors the fully mixed signal
+    // (dry + compression + distortion/reverb sends + EQ) - the same way a
+    // DJ mixer's filter knob sits on the master channel, not a single stem.
+    // Type and frequency are set by applyFilterAmountTo below rather than
+    // here, so there's one source of truth for the value-to-sound mapping.
+    const sweepFilterNode = ctx.createBiquadFilter()
+
     gainNode.connect(lowShelfNode)
     lowShelfNode.connect(midPeakNode)
     midPeakNode.connect(highShelfNode)
-    highShelfNode.connect(ctx.destination)
+    highShelfNode.connect(sweepFilterNode)
+    sweepFilterNode.connect(ctx.destination)
 
     // Compression is a true crossfade (dry fades out as wet fades in), not a
     // parallel add like the sends below - the compressor has an internal
@@ -211,9 +223,11 @@ export function useLoopPlayer() {
       lowShelfNode,
       midPeakNode,
       highShelfNode,
+      sweepFilterNode,
     }
     applyCompressionAmountTo(nodes, params.compressionAmount)
     applyOverdriveAmountTo(nodes, params.overdriveAmount)
+    applyFilterAmountTo(nodes, params.filterAmount)
     reverbWetGain.gain.value = params.reverbAmount
     return nodes
   }
@@ -229,6 +243,7 @@ export function useLoopPlayer() {
         lowGainDb,
         midGainDb,
         highGainDb,
+        filterAmount,
       })
       gainNode = nodes.gainNode
       compressionBus = nodes.compressionBus
@@ -244,6 +259,7 @@ export function useLoopPlayer() {
       lowShelfNode = nodes.lowShelfNode
       midPeakNode = nodes.midPeakNode
       highShelfNode = nodes.highShelfNode
+      sweepFilterNode = nodes.sweepFilterNode
     }
     return context
   }
@@ -282,6 +298,38 @@ export function useLoopPlayer() {
   function setHighGain(db: number) {
     highGainDb = Math.min(12, Math.max(-12, db))
     if (highShelfNode) highShelfNode.gain.value = highGainDb
+  }
+
+  // Sign picks highpass (right/positive) vs lowpass (left/negative); |value|
+  // (0-1) maps exponentially from a transparent frequency at center to an
+  // aggressive cutoff at the extreme - matches how pitched sweeps read to
+  // human hearing, unlike a linear Hz ramp which would feel like nothing
+  // happens for most of the knob's travel. Q also rises toward the extremes,
+  // same idea as applyCompressionAmountTo/applyOverdriveAmountTo scaling
+  // multiple related params together rather than just one, for a more
+  // musical resonant "sweep" character as the cutoff gets aggressive.
+  function applyFilterAmountTo(
+    nodes: Pick<EffectsGraphNodes, 'sweepFilterNode'>,
+    value: number,
+  ) {
+    const isHighpass = value > 0
+    const t = Math.min(1, Math.abs(value))
+    nodes.sweepFilterNode.type = isHighpass ? 'highpass' : 'lowpass'
+    nodes.sweepFilterNode.frequency.value = isHighpass
+      ? 20 * Math.pow(10000 / 20, t) // 20Hz (transparent) sweeping up to 10kHz
+      : 20000 * Math.pow(180 / 20000, t) // 20kHz (transparent) sweeping down to 180Hz
+    nodes.sweepFilterNode.Q.value = 0.7 + 2.8 * t // 0.7 gentle -> 3.5 resonant near the cutoff
+  }
+
+  function applyFilterAmount(value: number) {
+    filterAmount = value
+    if (sweepFilterNode) {
+      applyFilterAmountTo({ sweepFilterNode }, value)
+    }
+  }
+
+  function setFilter(value: number) {
+    applyFilterAmount(Math.min(1, Math.max(-1, value)))
   }
 
   // Ramps threshold down and ratio/makeup up together as the knob rises, so
@@ -415,6 +463,7 @@ export function useLoopPlayer() {
       lowGainDb,
       midGainDb,
       highGainDb,
+      filterAmount,
     })
     const offlineSource = offlineCtx.createBufferSource()
     offlineSource.buffer = forward
@@ -487,6 +536,7 @@ export function useLoopPlayer() {
     setLowGain,
     setMidGain,
     setHighGain,
+    setFilter,
     beginScratch,
     scratchBy,
     endScratch,

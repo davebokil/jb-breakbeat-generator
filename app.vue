@@ -11,6 +11,7 @@ const {
   setLowGain,
   setMidGain,
   setHighGain,
+  setFilter,
   beginScratch,
   scratchBy,
   endScratch,
@@ -31,7 +32,14 @@ const overdrive = ref(0)
 const low = ref(0)
 const mid = ref(0)
 const high = ref(0)
+const filter = ref(0)
 const downloading = ref(false)
+
+const filterLabel = computed(() => {
+  if (filter.value === 0) return 'OFF'
+  const pct = Math.round(Math.abs(filter.value) * 100)
+  return filter.value > 0 ? `HP ${pct}%` : `LP ${pct}%`
+})
 
 const tvScreen = ref<InstanceType<typeof TvScreen> | null>(null)
 const turntableHeight = ref<number | null>(null)
@@ -90,6 +98,59 @@ function onHighInput(event: Event) {
   const value = Number((event.target as HTMLInputElement).value)
   high.value = value
   setHighGain(value)
+}
+
+function onFilterInput(event: Event) {
+  const value = Number((event.target as HTMLInputElement).value)
+  filter.value = value
+  setFilter(value)
+}
+
+// Double-clicking a slider's knob snaps it back to its default - lets you
+// quickly clear one effect without dragging it back by hand.
+function onVolumeReset() {
+  volume.value = 0.8
+  setVolume(0.8)
+}
+
+function onPitchReset() {
+  pitch.value = 0
+  setPitch(0)
+}
+
+function onReverbReset() {
+  reverb.value = 0
+  setReverb(0)
+}
+
+function onCompressionReset() {
+  compression.value = 0
+  setCompression(0)
+}
+
+function onOverdriveReset() {
+  overdrive.value = 0
+  setOverdrive(0)
+}
+
+function onLowReset() {
+  low.value = 0
+  setLowGain(0)
+}
+
+function onMidReset() {
+  mid.value = 0
+  setMidGain(0)
+}
+
+function onHighReset() {
+  high.value = 0
+  setHighGain(0)
+}
+
+function onFilterReset() {
+  filter.value = 0
+  setFilter(0)
 }
 
 async function startPlaying(track: string, gif: string) {
@@ -197,11 +258,10 @@ onBeforeUnmount(() => {
       {{ activeRecord.title }}
     </h1>
     <p class="intro">
-      A free browser-based breakbeat generator. Instantly generate classic breaks,, scratch them on a virtual turntable, add reverb, tape saturation, glue compression, and pitch effects, then export your finished break.
-    </p>
+A free browser-based breakbeat generator. Instantly generate classic breaks, scratch them on a virtual turntable, and add reverb, tape saturation, compression, and pitch effects that shape both the audio and the video, then export your finished break.    </p>
 
     <div class="stage">
-      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :record-name="activeRecord.name" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" />
+      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :record-name="activeRecord.name" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" :filter="filter" :low="low" :mid="mid" :high="high" />
       <Turntable
         :playing="playing"
         :label-color="labelColor"
@@ -250,7 +310,9 @@ onBeforeUnmount(() => {
               max="1"
               step="0.01"
               :value="volume"
+              title="Double-click to reset"
               @input="onVolumeInput"
+              @dblclick="onVolumeReset"
             >
             <span class="effect-value">{{ Math.round(volume * 100) }}%</span>
           </div>
@@ -265,7 +327,9 @@ onBeforeUnmount(() => {
               max="5"
               step="0.1"
               :value="pitch"
+              title="Double-click to reset"
               @input="onPitchInput"
+              @dblclick="onPitchReset"
             >
             <span class="pitch-value">{{ pitch > 0 ? '+' : '' }}{{ pitch.toFixed(1) }}</span>
           </div>
@@ -280,7 +344,9 @@ onBeforeUnmount(() => {
               max="1"
               step="0.01"
               :value="reverb"
+              title="Double-click to reset"
               @input="onReverbInput"
+              @dblclick="onReverbReset"
             >
             <span class="effect-value">{{ Math.round(reverb * 100) }}%</span>
           </div>
@@ -295,7 +361,9 @@ onBeforeUnmount(() => {
               max="1"
               step="0.01"
               :value="compression"
+              title="Double-click to reset"
               @input="onCompressionInput"
+              @dblclick="onCompressionReset"
             >
             <span class="effect-value">{{ Math.round(compression * 100) }}%</span>
           </div>
@@ -310,7 +378,9 @@ onBeforeUnmount(() => {
               max="1"
               step="0.01"
               :value="overdrive"
+              title="Double-click to reset"
               @input="onOverdriveInput"
+              @dblclick="onOverdriveReset"
             >
             <span class="effect-value">{{ Math.round(overdrive * 100) }}%</span>
           </div>
@@ -325,7 +395,9 @@ onBeforeUnmount(() => {
               max="12"
               step="1"
               :value="low"
+              title="Double-click to reset"
               @input="onLowInput"
+              @dblclick="onLowReset"
             >
             <span class="effect-value">{{ low > 0 ? '+' : '' }}{{ low }}dB</span>
           </div>
@@ -340,7 +412,9 @@ onBeforeUnmount(() => {
               max="12"
               step="1"
               :value="mid"
+              title="Double-click to reset"
               @input="onMidInput"
+              @dblclick="onMidReset"
             >
             <span class="effect-value">{{ mid > 0 ? '+' : '' }}{{ mid }}dB</span>
           </div>
@@ -355,9 +429,28 @@ onBeforeUnmount(() => {
               max="12"
               step="1"
               :value="high"
+              title="Double-click to reset"
               @input="onHighInput"
+              @dblclick="onHighReset"
             >
             <span class="effect-value">{{ high > 0 ? '+' : '' }}{{ high }}dB</span>
+          </div>
+
+          <div class="filter">
+            <label for="filter">FILTER</label>
+            <input
+              id="filter"
+              class="fx-slider"
+              type="range"
+              min="-1"
+              max="1"
+              step="0.01"
+              :value="filter"
+              title="Double-click to reset"
+              @input="onFilterInput"
+              @dblclick="onFilterReset"
+            >
+            <span class="filter-value">{{ filterLabel }}</span>
           </div>
         </div>
       </fieldset>
@@ -534,7 +627,8 @@ onBeforeUnmount(() => {
 .overdrive,
 .low,
 .mid,
-.high {
+.high,
+.filter {
   display: contents;
 }
 
@@ -545,7 +639,8 @@ onBeforeUnmount(() => {
 .overdrive label,
 .low label,
 .mid label,
-.high label {
+.high label,
+.filter label {
   justify-self: end;
   color: #eee;
   font-size: 0.85rem;
@@ -596,11 +691,16 @@ onBeforeUnmount(() => {
 }
 
 .pitch-value,
-.effect-value {
+.effect-value,
+.filter-value {
   font-variant-numeric: tabular-nums;
   color: #eee;
   min-width: 3.2em;
   text-align: left;
+}
+
+.filter-value {
+  min-width: 4.2em;
 }
 
 .error {
