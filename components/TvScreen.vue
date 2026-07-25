@@ -2,10 +2,12 @@
 const props = withDefaults(defineProps<{
   gif: string | null
   playing: boolean
+  recordName?: string
   pitch?: number
   reverb?: number
   overdrive?: number
 }>(), {
+  recordName: 'breakbeat',
   pitch: 0,
   reverb: 0,
   overdrive: 0,
@@ -53,7 +55,7 @@ onBeforeUnmount(() => player.stop())
           v-show="showScreen"
           ref="canvasEl"
           role="img"
-          aria-label="Godfather of Soul breakbeat gif"
+          :aria-label="`${recordName} breakbeat gif`"
           class="screen-gif"
         />
         <div v-if="!showScreen" class="static">

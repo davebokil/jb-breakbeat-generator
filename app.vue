@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { pickTrack, pickGif, pickLabelColor } = useBreakbeats()
+const { records, pickTrack, pickGif, pickLabelColor } = useBreakbeats()
 const {
   play,
   stop,
@@ -18,9 +18,10 @@ const {
 } = useLoopPlayer()
 
 const playing = ref(false)
+const activeRecord = ref(records[0])
 const currentTrack = ref<string | null>(null)
 const currentGif = ref<string | null>(null)
-const labelColor = ref(pickLabelColor())
+const labelColor = ref(pickLabelColor(activeRecord.value))
 const errorMessage = ref('')
 const volume = ref(0.8)
 const pitch = ref(0)
@@ -106,17 +107,35 @@ async function startPlaying(track: string, gif: string) {
 }
 
 function onPlay() {
+  if (!activeRecord.value.tracks.length || !activeRecord.value.gifs.length) {
+    errorMessage.value = `${activeRecord.value.name} doesn't have any breaks loaded yet.`
+    return
+  }
   // Exclude the last-played track/gif so replaying after a stop
   // doesn't repeat the same combo back to back.
-  const track = pickTrack(currentTrack.value ?? undefined)
-  const gif = pickGif(currentGif.value ?? undefined)
-  labelColor.value = pickLabelColor(labelColor.value)
+  const track = pickTrack(activeRecord.value, currentTrack.value ?? undefined)
+  const gif = pickGif(activeRecord.value, currentGif.value ?? undefined)
+  labelColor.value = pickLabelColor(activeRecord.value, labelColor.value)
   startPlaying(track, gif)
 }
 
 function onHitMe() {
   if (!playing.value) return
   onPlay()
+}
+
+function onSelectRecord(id: string) {
+  if (id === activeRecord.value.id) return
+  const record = records.find(r => r.id === id)
+  if (!record) return
+
+  if (playing.value) onStop()
+
+  activeRecord.value = record
+  currentTrack.value = null
+  currentGif.value = null
+  labelColor.value = pickLabelColor(record)
+  errorMessage.value = ''
 }
 
 function onScratchStart() {
@@ -175,14 +194,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="page">
     <h1 class="title" :style="{ color: labelColor }">
-      THE GODFATHER OF SOUL BREAKBEAT GENERATOR
+      {{ activeRecord.title }}
     </h1>
     <p class="intro">
-      A free browser-based breakbeat generator. Instantly generate random classic breaks from the Godfather of Soul, scratch them on a virtual turntable, add reverb, tape saturation, glue compression, and pitch effects, then export your finished break.
+      A free browser-based breakbeat generator. Instantly generate classic breaks,, scratch them on a virtual turntable, add reverb, tape saturation, glue compression, and pitch effects, then export your finished break.
     </p>
 
     <div class="stage">
-      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" />
+      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :record-name="activeRecord.name" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" />
       <Turntable
         :playing="playing"
         :label-color="labelColor"
@@ -192,6 +211,7 @@ onBeforeUnmount(() => {
         @scratch-move="onScratchMove"
         @scratch-end="onScratchEnd"
       />
+      <RecordCrate :records="records" :active-id="activeRecord.id" @select="onSelectRecord" />
     </div>
 
     <div class="controls">
