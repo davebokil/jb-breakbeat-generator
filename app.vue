@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const { records, pickTrack, pickGif, pickLabelColor } = useBreakbeats()
+const loopPlayer = useLoopPlayer()
 const {
   play,
   stop,
@@ -16,13 +17,30 @@ const {
   scratchBy,
   endScratch,
   renderMix,
-} = useLoopPlayer()
+} = loopPlayer
+const chopPad = useChopPad(loopPlayer)
+// Destructured (not accessed as chopPad.slices) so Vue's template ref
+// unwrapping applies - a ref nested inside a plain object doesn't unwrap.
+const {
+  slices: chopSlices,
+  analyzing: chopAnalyzing,
+  sliceMode: chopSliceMode,
+  candidateOnsets: chopCandidateOnsets,
+  peaks: chopPeaks,
+  duration: chopDuration,
+} = chopPad
 
+const stageMode = ref<'scratch' | 'chop'>('scratch')
 const playing = ref(false)
 const activeRecord = ref(records[0])
 const currentTrack = ref<string | null>(null)
 const currentGif = ref<string | null>(null)
-const labelColor = ref(pickLabelColor(activeRecord.value))
+// Deterministic (not pickLabelColor's Math.random pick) so the server-rendered
+// HTML and the client's pre-hydration render agree - randomizing this at
+// setup-time caused a hydration mismatch, since SSR and client renders would
+// each roll their own random color. Randomized for real once mounted, since
+// that only ever runs client-side, after hydration has already reconciled.
+const labelColor = ref(activeRecord.value.labelColors[0])
 const errorMessage = ref('')
 const volume = ref(0.8)
 const pitch = ref(0)
@@ -40,6 +58,11 @@ const filterLabel = computed(() => {
   const pct = Math.round(Math.abs(filter.value) * 100)
   return filter.value > 0 ? `HP ${pct}%` : `LP ${pct}%`
 })
+
+// TvScreen's playing prop doubles as "should the gif be visible/animating" -
+// true for turntable playback, and also true once chop mode has a loaded,
+// chopped track ready, since chop mode has no separate play/stop transport.
+const screenActive = computed(() => playing.value || (stageMode.value === 'chop' && chopSlices.value.length > 0))
 
 const tvScreen = ref<InstanceType<typeof TvScreen> | null>(null)
 const turntableHeight = ref<number | null>(null)
@@ -197,6 +220,54 @@ function onSelectRecord(id: string) {
   currentGif.value = null
   labelColor.value = pickLabelColor(record)
   errorMessage.value = ''
+
+  chopPad.reset()
+  if (stageMode.value === 'chop') analyzeCurrentTrackForChop()
+}
+
+// Picks a track/gif for the active record if chop mode doesn't already have
+// one loaded (mirrors onPlay's random-excluding-previous picks), then runs
+// transient detection on it.
+async function analyzeCurrentTrackForChop() {
+  if (!currentTrack.value) {
+    if (!activeRecord.value.tracks.length || !activeRecord.value.gifs.length) {
+      errorMessage.value = `${activeRecord.value.name} doesn't have any breaks loaded yet.`
+      return
+    }
+    currentTrack.value = pickTrack(activeRecord.value)
+    currentGif.value = pickGif(activeRecord.value)
+    labelColor.value = pickLabelColor(activeRecord.value, labelColor.value)
+  }
+  try {
+    await chopPad.analyzeTrack(currentTrack.value)
+  } catch (err) {
+    errorMessage.value = "Couldn't analyze that breakbeat, try again."
+    console.error(err)
+  }
+}
+
+// Chop mode has no explicit PLAY button - pads go live as soon as analysis
+// resolves, matching real hardware where pressing a pad is the play action.
+function setStageMode(mode: 'scratch' | 'chop') {
+  if (stageMode.value === mode) return
+  stageMode.value = mode
+  errorMessage.value = ''
+  if (mode === 'chop') {
+    onStop()
+    analyzeCurrentTrackForChop()
+  }
+}
+
+function onPadDown(padIndex: number) {
+  chopPad.triggerPad(padIndex)
+}
+
+function onSliceModeChange(mode: 'transient' | 'equal') {
+  chopPad.setSliceMode(mode)
+}
+
+function onSetBoundaries(times: number[]) {
+  chopPad.setManualBoundaries(times)
 }
 
 function onScratchStart() {
@@ -239,6 +310,9 @@ async function onDownload() {
 }
 
 onMounted(() => {
+  // Client-only, so this never disagrees with what the server rendered.
+  labelColor.value = pickLabelColor(activeRecord.value)
+
   updateTurntableHeight()
   tvResizeObserver = new ResizeObserver(updateTurntableHeight)
   if (tvScreen.value?.$el) {
@@ -248,6 +322,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stop()
+  chopPad.reset()
   tvResizeObserver?.disconnect()
 })
 </script>
@@ -260,9 +335,50 @@ onBeforeUnmount(() => {
     <p class="intro">
 A free browser-based breakbeat generator. Instantly generate classic breaks, scratch them on a virtual turntable, and add reverb, tape saturation, compression, and pitch effects that shape both the audio and the video, then export your finished break.    </p>
 
+    <div class="mode-toggle" role="group" aria-label="Playback mode">
+      <button
+        type="button"
+        class="mode-button"
+        :class="{ active: stageMode === 'scratch' }"
+        @click="setStageMode('scratch')"
+      >
+        SCRATCH
+      </button>
+      <button
+        type="button"
+        class="mode-button"
+        :class="{ active: stageMode === 'chop' }"
+        @click="setStageMode('chop')"
+      >
+        CHOP
+      </button>
+    </div>
+
+    <div v-if="stageMode === 'chop'" class="mode-toggle small" role="group" aria-label="Slicing mode">
+      <button
+        type="button"
+        class="mode-button small"
+        :class="{ active: chopSliceMode === 'transient' }"
+        title="Slice at detected drum-hit transients"
+        @click="onSliceModeChange('transient')"
+      >
+        AUTO
+      </button>
+      <button
+        type="button"
+        class="mode-button small"
+        :class="{ active: chopSliceMode === 'equal' }"
+        title="Slice into 8 equal-length divisions"
+        @click="onSliceModeChange('equal')"
+      >
+        EQUAL
+      </button>
+    </div>
+
     <div class="stage">
-      <TvScreen ref="tvScreen" :gif="currentGif" :playing="playing" :record-name="activeRecord.name" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" :filter="filter" :low="low" :mid="mid" :high="high" />
+      <TvScreen ref="tvScreen" :gif="currentGif" :playing="screenActive" :record-name="activeRecord.name" :pitch="pitch" :reverb="reverb" :overdrive="overdrive" :filter="filter" :low="low" :mid="mid" :high="high" />
       <Turntable
+        v-if="stageMode === 'scratch'"
         :playing="playing"
         :label-color="labelColor"
         :height="turntableHeight"
@@ -271,31 +387,53 @@ A free browser-based breakbeat generator. Instantly generate classic breaks, scr
         @scratch-move="onScratchMove"
         @scratch-end="onScratchEnd"
       />
+      <PadGrid
+        v-else
+        :slices="chopSlices"
+        :analyzing="chopAnalyzing"
+        :height="turntableHeight"
+        @pad-down="onPadDown"
+      />
       <RecordCrate :records="records" :active-id="activeRecord.id" @select="onSelectRecord" />
     </div>
 
+    <WaveformEditor
+      v-if="stageMode === 'chop'"
+      :peaks="chopPeaks"
+      :duration="chopDuration"
+      :candidate-onsets="chopCandidateOnsets"
+      :boundaries="chopSlices.map(s => s.start)"
+      :analyzing="chopAnalyzing"
+      @set-boundaries="onSetBoundaries"
+    />
+
     <div class="controls">
-      <button v-if="!playing" class="play-button" type="button" @click="onPlay">
-        ▶ PLAY
-      </button>
-      <template v-else>
-        <p class="hint">
-          Click <strong>HIT MEH!</strong> for another break
-        </p>
-        <div class="playing-actions">
-          <button class="stop-button" type="button" @click="onStop">
-            ■ STOP
-          </button>
-          <button
-            class="download-button"
-            type="button"
-            :disabled="downloading"
-            @click="onDownload"
-          >
-            {{ downloading ? 'RENDERING…' : '⬇ DOWNLOAD' }}
-          </button>
-        </div>
+      <template v-if="stageMode === 'scratch'">
+        <button v-if="!playing" class="play-button" type="button" @click="onPlay">
+          ▶ PLAY
+        </button>
+        <template v-else>
+          <p class="hint">
+            Click <strong>HIT MEH!</strong> for another break
+          </p>
+          <div class="playing-actions">
+            <button class="stop-button" type="button" @click="onStop">
+              ■ STOP
+            </button>
+            <button
+              class="download-button"
+              type="button"
+              :disabled="downloading"
+              @click="onDownload"
+            >
+              {{ downloading ? 'RENDERING…' : '⬇ DOWNLOAD' }}
+            </button>
+          </div>
+        </template>
       </template>
+      <p v-else class="hint">
+        Tap a pad, or use <strong>1234</strong> / <strong>QWER</strong>, to play a slice
+      </p>
 
       <fieldset class="effects">
         <legend>EFFECTS</legend>
@@ -491,6 +629,48 @@ A free browser-based breakbeat generator. Instantly generate classic breaks, scr
   color: #aaa;
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.mode-button {
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 1.4rem;
+  border: 2px solid #e8e8e8;
+  border-radius: 50px;
+  background: transparent;
+  color: #e8e8e8;
+  cursor: pointer;
+  transition: transform 0.15s, filter 0.15s, background 0.15s, color 0.15s;
+}
+
+.mode-button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.mode-button.active {
+  background: #e8e8e8;
+  color: #111;
+}
+
+.mode-button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.mode-toggle.small {
+  margin-top: -1.5rem;
+}
+
+.mode-button.small {
+  font-size: 0.75rem;
+  padding: 0.35rem 1rem;
 }
 
 .stage {

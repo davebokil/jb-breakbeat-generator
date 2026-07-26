@@ -264,7 +264,7 @@ export function useLoopPlayer() {
     return context
   }
 
-  function connectSourceToEffects(node: AudioBufferSourceNode) {
+  function connectSourceToEffects(node: AudioNode) {
     if (!compressionDryGain || !compressorNode) return
     node.connect(compressionDryGain)
     node.connect(compressorNode)
@@ -525,6 +525,68 @@ export function useLoopPlayer() {
     scratchPlayhead = null
   }
 
+  interface SliceVoice {
+    // fadeSeconds > 0 ramps gain to 0 before stopping, to avoid a click when
+    // a pad retrigger steals (cuts off) its own still-sounding previous hit.
+    stop(fadeSeconds?: number): void
+  }
+
+  // One-shot playback of a slice of an already-decoded buffer, for chop/pad
+  // mode. Starts at offset and, when duration is omitted, plays through to
+  // the buffer's natural end rather than auto-stopping at a slice boundary -
+  // a pad only gets cut off by another pad stealing the voice (see
+  // useChopPad's stopAllVoices), never by reaching its own slice's end. The
+  // same "decode once, schedule a cheap node at hit-time" principle scratchBy
+  // already relies on. A per-call gain node lets each slice have its own
+  // volume trim while still routing through the single shared effects graph.
+  function triggerSlice(
+    buffer: AudioBuffer,
+    offset: number,
+    duration: number | undefined,
+    options: { detuneSemitones?: number, gainValue?: number, onEnded?: () => void } = {},
+  ): SliceVoice | null {
+    const ctx = getContext()
+    if (!compressionDryGain || !compressorNode) return null
+    if (ctx.state === 'suspended') void ctx.resume()
+
+    const node = ctx.createBufferSource()
+    node.buffer = buffer
+    node.loop = false
+    node.detune.value = ((options.detuneSemitones ?? 0) + pitchSemitones) * 100
+
+    const voiceGain = ctx.createGain()
+    voiceGain.gain.value = options.gainValue ?? 1
+    node.connect(voiceGain)
+    connectSourceToEffects(voiceGain)
+
+    if (duration === undefined) {
+      node.start(0, Math.max(0, offset))
+    } else {
+      node.start(0, Math.max(0, offset), Math.max(0, duration))
+    }
+    node.onended = () => {
+      node.disconnect()
+      voiceGain.disconnect()
+      options.onEnded?.()
+    }
+
+    let stopped = false
+    function stop(fadeSeconds = 0) {
+      if (stopped) return
+      stopped = true
+      const now = ctx.currentTime
+      if (fadeSeconds > 0) {
+        voiceGain.gain.cancelScheduledValues(now)
+        voiceGain.gain.setValueAtTime(voiceGain.gain.value, now)
+        voiceGain.gain.linearRampToValueAtTime(0, now + fadeSeconds)
+        node.stop(now + fadeSeconds)
+      } else {
+        node.stop(now)
+      }
+    }
+    return { stop }
+  }
+
   return {
     play,
     stop,
@@ -541,5 +603,7 @@ export function useLoopPlayer() {
     scratchBy,
     endScratch,
     renderMix,
+    loadBuffers,
+    triggerSlice,
   }
 }
